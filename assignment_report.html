@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scalable Data Processing API - Assignment</title>
+<style>
+    @page {
+        size: A4 landscape;
+        margin: 0;
+    }
+    body {
+        margin: 0;
+        padding: 0;
+        font-family: Arial, sans-serif;
+        background-color: #f0f0f0;
+        color: #333;
+    }
+    .page {
+        width: 297mm;
+        height: 210mm;
+        box-sizing: border-box;
+        padding: 20mm 20mm 20mm 40mm;
+        position: relative;
+        page-break-after: always;
+        overflow: hidden;
+    }
+    .sidebar {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 30mm;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-right: 1px solid #ccc;
+    }
+    .sidebar-text {
+        transform: rotate(-90deg);
+        white-space: nowrap;
+        font-size: 14pt;
+        font-weight: bold;
+        letter-spacing: 1px;
+    }
+    .sidebar-info {
+        position: absolute;
+        left: 5mm;
+        top: 20mm;
+        transform: rotate(-90deg);
+        transform-origin: left top;
+        font-size: 8pt;
+        white-space: nowrap;
+        font-weight: normal;
+    }
+    .content {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+    h1 {
+        font-size: 24pt;
+        margin-top: 0;
+        margin-bottom: 5mm;
+        color: #111;
+    }
+    h2 {
+        font-size: 16pt;
+        color: #0056b3;
+        margin-top: 0;
+        margin-bottom: 3mm;
+        border-bottom: 2px solid #ccc;
+        padding-bottom: 2mm;
+    }
+    h3 {
+        font-size: 12pt;
+        margin-bottom: 2mm;
+        margin-top: 4mm;
+    }
+    p, li {
+        font-size: 10pt;
+        line-height: 1.4;
+    }
+    pre {
+        background-color: transparent;
+        font-family: Consolas, monospace;
+        font-size: 7.5pt;
+        line-height: 1.2;
+        margin: 0;
+        padding: 0;
+        white-space: pre-wrap;
+    }
+    .pros-cons {
+        display: flex;
+        gap: 10mm;
+        margin-top: 5mm;
+        margin-bottom: 5mm;
+    }
+    .pros, .cons {
+        flex: 1;
+        padding: 3mm;
+        border: 1px solid;
+    }
+    .pros {
+        border-color: #28a745;
+        background-color: #e6f4ea;
+    }
+    .cons {
+        border-color: #dc3545;
+        background-color: #fce8e6;
+    }
+    .pros h4, .cons h4 {
+        margin: 0 0 2mm 0;
+        font-size: 11pt;
+    }
+    .pros li { color: #155724; }
+    .cons li { color: #721c24; }
+    .two-col {
+        display: flex;
+        gap: 10mm;
+        height: 100%;
+    }
+    .col {
+        flex: 1;
+        overflow: hidden;
+    }
+</style>
+</head>
+<body>
+
+<!-- PAGE 1 -->
+<div class="page">
+    <div class="sidebar">
+        <div class="sidebar-info">Name: Naman Meena<br>Email: 22JE0606@iitism.ac.in</div>
+        <div class="sidebar-text">NEWGEN SOFTWARES ASSIGNMENT</div>
+    </div>
+    <div class="content">
+        <h1>Scalable Data Processing API</h1>
+        <p>Solution covering Assignment 1 (Out-of-Core Data Join) and Assignment 2 (Non-Blocking FastAPI with two background-processing approaches).</p>
+        
+        <h2>Assignment 1 — Out-of-Core Data Join</h2>
+        
+        <h3>Problem Statement</h3>
+        <p>Perform an INNER JOIN on users.csv (~500 MB, 5 M rows) and transactions.csv (~500 MB, 10 M rows) on the user_id column, producing result.csv. The entire operation must fit inside a 256 MB RAM budget — ruling out loading either file fully into memory with pandas.read_csv().</p>
+        
+        <h3>Algorithm — DuckDB Streaming Out-of-Core Join</h3>
+        <p>The solution uses DuckDB, an embedded analytical database engine designed for fast SQL execution. DuckDB's CSV scanner reads data lazily in chunks, never materializing entire files in RAM at once.</p>
+        <ul>
+            <li><strong>Memory Limit:</strong> DuckDB is configured with `SET memory_limit = '200MB'` to strictly stay under the 256MB system constraint.</li>
+            <li><strong>Streaming Execution:</strong> The `COPY (...) TO 'result.csv'` query executes the join and streams the results directly to disk.</li>
+            <li><strong>Disk Spilling:</strong> A unique temporary directory is provided for each job, allowing DuckDB to safely spill intermediate hash tables to disk if memory pressure is too high, avoiding OOM errors.</li>
+        </ul>
+        
+        <h3>Complete Source — join_service.py (Part 1)</h3>
+<pre>
+import logging
+import os
+import shutil
+import time
+import uuid
+import duckdb
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)-8s  %(message)s")
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+def perform_join(users_path=os.path.join(BASE_DIR, "users.csv"),
+                 transactions_path=os.path.join(BASE_DIR, "transactions.csv"),
+                 output_path=os.path.join(BASE_DIR, "result.csv"),
+                 memory_limit="200MB") -> dict:
+    
+    start = time.perf_counter()
+    con = duckdb.connect(database=":memory:")
+    temp_dir = os.path.join(BASE_DIR, f"duckdb_tmp_{uuid.uuid4().hex}")
+    
+    try:
+        con.execute(f"SET memory_limit = '{memory_limit}'")
+        con.execute(f"SET temp_directory = '{temp_dir.replace(os.sep, '/')}'")
+        con.execute("SET preserve_insertion_order = false")
+        con.execute("SET threads = 2")
+</pre>
+    </div>
+</div>
+
+<!-- PAGE 2 -->
+<div class="page">
+    <div class="sidebar">
+        <div class="sidebar-text">NEWGEN SOFTWARES ASSIGNMENT</div>
+    </div>
+    <div class="content">
+        <h2>Assignment 1 (Continued)</h2>
+        <h3>Complete Source — join_service.py (Part 2)</h3>
+<pre>
+        query = f"""
+            COPY (
+                SELECT
+                    u.user_id, u.name, u.email, u.age, u.city,
+                    t.transaction_id, t.amount, t.date, t.category
+                FROM read_csv_auto('{users_path.replace(os.sep, "/")}')       AS u
+                JOIN read_csv_auto('{transactions_path.replace(os.sep, "/")}') AS t
+                  ON u.user_id = t.user_id
+            ) TO '{output_path.replace(os.sep, "/")}' (HEADER, DELIMITER ',');
+        """
+        con.execute(query)
+
+        row_count = con.execute(
+            f"SELECT count(*) FROM read_csv_auto('{output_path.replace(os.sep, '/')}')"
+        ).fetchone()[0]
+    finally:
+        con.close()
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    duration = time.perf_counter() - start
+    logger.info("Join complete in %.2fs -- %s rows written.", duration, f"{row_count:,}")
+    return {"rows": row_count, "output_path": output_path, "duration_seconds": round(duration, 2)}
+</pre>
+
+        <h3>Expected Log Output</h3>
+<pre>
+python generate_data.py   # creates users.csv and transactions.csv
+python join_service.py    # produces result.csv
+
+2026-05-22 17:50:03,657  INFO      Starting out-of-core join ...
+2026-05-22 17:50:03,657  INFO        users         : users.csv
+2026-05-22 17:50:03,657  INFO        transactions  : transactions.csv
+2026-05-22 17:50:03,657  INFO        output        : result_9d7957fc.csv
+2026-05-22 17:50:03,657  INFO        memory_limit  : 200MB
+2026-05-22 17:50:11,209  INFO      Join complete in 7.55s -- 8,000,000 rows written.
+</pre>
+    </div>
+</div>
+
+<!-- PAGE 3 -->
+<div class="page">
+    <div class="sidebar">
+        <div class="sidebar-text">NEWGEN SOFTWARES ASSIGNMENT</div>
+    </div>
+    <div class="content">
+        <h2>Assignment 2 — Non-Blocking FastAPI</h2>
+        <p>The join operation takes ~7 seconds of CPU and I/O time. Running it synchronously inside an HTTP handler would block the event loop, causing timeouts and denying service to other users. The solution exposes a POST /trigger-join endpoint that immediately returns a job_id (HTTP 202 Accepted), while the join proceeds asynchronously. Clients poll GET /status/{job_id} for status updates.</p>
+        
+        <h3>API Contract</h3>
+<pre>
+# Trigger a join job
+POST /trigger-join
+  -> 202 Accepted
+  -> { "job_id": "&lt;uuid&gt;" }
+
+# Poll for status
+GET /status/{job_id}
+  -> 200 OK
+  -> { "job_id": "&lt;uuid&gt;",
+       "status": "pending | running | completed | failed",
+       "error": "&lt;human-readable message if failed&gt;",
+       "result": { "rows": 8000000, "output_path": "...", "duration_seconds": 7.55 } }
+</pre>
+
+        <h3>Approach 1 — FastAPI BackgroundTasks</h3>
+        <p>FastAPI’s built-in BackgroundTasks mechanism runs the join function in a regular OS thread after the HTTP response has been flushed to the client. No external services or extra processes are needed.</p>
+
+        <div class="pros-cons">
+            <div class="pros">
+                <h4>Pros</h4>
+                <ul>
+                    <li>Zero extra dependencies beyond FastAPI and Uvicorn.</li>
+                    <li>Very simple to read and reason about.</li>
+                    <li>Adequate for low-to-medium concurrency loads.</li>
+                </ul>
+            </div>
+            <div class="cons">
+                <h4>Cons</h4>
+                <ul>
+                    <li>Thread shares the same process as the web server — CPU-heavy work can degrade API responsiveness.</li>
+                    <li>In-memory job store: server restart loses all job state.</li>
+                    <li>Requires manual semaphore to prevent 1000 requests from spawning 1000 joins and bypassing the 256MB limit.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- PAGE 4 -->
+<div class="page">
+    <div class="sidebar">
+        <div class="sidebar-text">NEWGEN SOFTWARES ASSIGNMENT</div>
+    </div>
+    <div class="content">
+        <h2>Assignment 2 (Continued)</h2>
+        <h3>Source — api_background_tasks.py</h3>
+<pre>
+import logging, os, threading, uuid
+from datetime import datetime, timezone
+from fastapi import BackgroundTasks, FastAPI, HTTPException
+import join_service
+
+app = FastAPI(title="Data Join API -- BackgroundTasks Approach")
+jobs: dict[str, dict] = {}
+MAX_CONCURRENT_JOINS = 1
+_join_semaphore = threading.Semaphore(MAX_CONCURRENT_JOINS)
+
+def _run_join(job_id: str) -> None:
+    acquired = _join_semaphore.acquire(timeout=0)
+    if not acquired:
+        jobs[job_id]["status"] = "failed"
+        jobs[job_id]["error"] = "Another join is already running. Try again later."
+        return
+
+    jobs[job_id]["status"] = "running"
+    try:
+        output_file = os.path.join(join_service.BASE_DIR, f"result_{job_id}.csv")
+        result = join_service.perform_join(output_path=output_file)
+        jobs[job_id]["status"] = "completed"
+        jobs[job_id]["result"] = result
+    except Exception as exc:
+        jobs[job_id]["status"] = "failed"
+        jobs[job_id]["error"] = str(exc)
+    finally:
+        _join_semaphore.release()
+
+@app.post("/trigger-join", status_code=202)
+async def trigger_join(background_tasks: BackgroundTasks):
+    job_id = str(uuid.uuid4())
+    jobs[job_id] = { "status": "pending", "result": None, "error": None }
+    background_tasks.add_task(_run_join, job_id)
+    return {"job_id": job_id}
+
+@app.get("/status/{job_id}")
+async def get_status(job_id: str):
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return {"job_id": job_id, **jobs[job_id]}
+</pre>
+    </div>
+</div>
+
+<!-- PAGE 5 -->
+<div class="page">
+    <div class="sidebar">
+        <div class="sidebar-text">NEWGEN SOFTWARES ASSIGNMENT</div>
+    </div>
+    <div class="content">
+        <h2>Assignment 2 (Continued)</h2>
+        <h3>Approach 2 — Celery with Redis Broker</h3>
+        <p>The join is submitted to a Celery worker backed by a Redis message queue. The API server only handles HTTP requests and enqueues tasks, completely isolated from the heavy data processing.</p>
+        
+        <div class="pros-cons">
+            <div class="pros">
+                <h4>Pros</h4>
+                <ul>
+                    <li>True isolation — the join never competes with the FastAPI event loop for the GIL.</li>
+                    <li>Built-in concurrency controls (e.g., Celery worker concurrency limits) prevent unbounded resource consumption natively.</li>
+                    <li>A crashing worker cannot bring down the web server process.</li>
+                    <li>Persistent job state tracking via Redis backend.</li>
+                </ul>
+            </div>
+            <div class="cons">
+                <h4>Cons</h4>
+                <ul>
+                    <li>Requires deploying and maintaining an external message broker (Redis).</li>
+                    <li>More complex deployment architecture (requires starting a separate Celery worker process).</li>
+                </ul>
+            </div>
+        </div>
+
+        <h3>Source — api_celery.py</h3>
+<pre>
+from celery.result import AsyncResult
+from fastapi import FastAPI
+from celery_worker import celery_app, run_join_task
+
+app = FastAPI(title="Data Join API -- Celery Approach")
+
+@app.post("/trigger-join", status_code=202)
+async def trigger_join():
+    task = run_join_task.delay()
+    return {"job_id": task.id}
+
+@app.get("/status/{job_id}")
+async def get_status(job_id: str):
+    result = AsyncResult(job_id, app=celery_app)
+    response = { "job_id": job_id, "status": result.state.lower() }
+    
+    if result.state == "SUCCESS":
+        response["result"] = result.result
+    elif result.state == "FAILURE":
+        response["error"] = str(result.result)
+        
+    return response
+</pre>
+    </div>
+</div>
+
+</body>
+</html>

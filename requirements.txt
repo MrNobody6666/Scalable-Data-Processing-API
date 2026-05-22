@@ -1,0 +1,8 @@
+# Core
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+duckdb>=1.0.0
+
+# Celery + Redis (Approach 2)
+celery>=5.4.0
+redis>=5.0.0
